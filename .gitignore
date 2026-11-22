@@ -1,0 +1,29 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+!backend/.env.example
+.tools/
+.local/
+*.log
+.vercel/
+reference/
+
+# Local editor, database-client and operating-system state
+.vscode/
+.idea/
+*.session.sql
+*.code-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local caches and temporary files
+.cache/
+.eslintcache
+*.tmp
+*.temp
+*.swp
+*.swo

@@ -1,0 +1,24 @@
+name: Frontdesk maintenance
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '2-59/5 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: frontdesk-maintenance
+  cancel-in-progress: false
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Process bounded maintenance batches
+        run: node backend/scripts/run-maintenance.js
+        env:
+          FRONTDESK_BACKEND_URL: ${{ secrets.FRONTDESK_BACKEND_URL }}
+          JOB_TOKEN: ${{ secrets.JOB_TOKEN }}

@@ -1,0 +1,53 @@
+{
+  "name": "frontdesk-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch src/server.js",
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "node --env-file-if-exists=../.env scripts/seed-demo.js",
+    "db:provision": "node scripts/provision-local.js",
+    "db:migrate:test": "node scripts/migrate-test.js",
+    "db:grants": "node scripts/grant-runtime.js",
+    "check:stack": "node scripts/check-stack.js",
+    "check:performance": "node scripts/performance-check.js",
+    "db:verify": "node --env-file-if-exists=.env scripts/verify-database.js",
+    "db:studio": "node scripts/studio-local.js",
+    "maintenance": "node --env-file-if-exists=.env scripts/run-maintenance.js",
+    "test": "vitest run",
+    "test:integration": "vitest run tests/integration.test.js",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.0.0",
+    "@prisma/client": "7.0.0",
+    "argon2": "0.44.0",
+    "connect-pg-simple": "10.0.0",
+    "csrf-sync": "4.2.1",
+    "dotenv": "17.2.3",
+    "express": "5.1.0",
+    "express-rate-limit": "8.7.5",
+    "express-session": "1.18.2",
+    "helmet": "8.1.0",
+    "luxon": "3.7.2",
+    "pg": "8.16.3",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "eslint": "9.39.1",
+    "globals": "16.5.0",
+    "prettier": "3.6.2",
+    "prisma": "7.0.0",
+    "supertest": "7.1.4",
+    "vitest": "4.1.12"
+  }
+}

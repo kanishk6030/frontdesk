@@ -1,0 +1,12 @@
+# Handoff limitations
+
+The application, local PostgreSQL setup and mandatory incident protections are implemented and tested. This is **not yet a completed hosted submission**.
+
+- **R-04/R-05/R-06, P-13:** no authenticated hosting/repository destination was available. No live URL, remote repository URL, real Vercel cookie/proxy check, hosted persistence check, observed scheduled run or seven-day availability guarantee is claimed. Render blueprint, Vercel configuration generator, scheduler and exact operator instructions are provided. They require actual hosting origins, credentials, role-capable PostgreSQL and a published repository.
+- The full user-pinned **Prisma 7.0.0 tooling** reports 14 high-severity dependency advisories. Production generation is followed by omitting development **and optional** dependencies; that selection audits clean. Review a future matched CLI/client/adapter upgrade before using the toolchain broadly. The current pin was preserved because its JavaScript compatibility checks succeeded and the user explicitly required it. Do not expose Prisma tooling to the network.
+- Holidays default to an explicitly empty demo list; no actual Arvo festival calendar was supplied. HIGH same-working-day resolution retains the approved short late-day allowance. Portal response evidence is not an external delivery receipt. A privileged database owner remains outside the immutability guarantee.
+- Free backend sleep and delayed GitHub scheduling can delay stored closure; commands enforce the cutoff under lock and GET shows closure pending. Login limiting is process-local for the single-instance demo. Broad POST idempotency, reassignment, exports, attachments and external messaging remain deferred as approved.
+- Local browser checks use installed Edge. Real Vercel/Render behavior and other browser engines are unverified. The performance observation is a small local warm-query measurement, not a production load or security certification.
+- Phase 2 measured work started **2026-11-21 16:19:43 UTC**. Actual completion/checkpoint time is recorded in `docs/16-IMPLEMENTATION_LOG.md`. Phase 1 duration was not measured and is unknown; total project effort cannot honestly be stated as eight hours. The 480-minute plan is a target, not a fabricated timesheet.
+
+No hiring submission has been sent to anyone. Existing Docker volumes and unrelated user files have been preserved.

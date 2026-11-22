@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+  engineType = "client"
+}
+datasource db {
+  provider = "postgresql"
+}
+model CompatibilityProbe {
+  id Int @id
+  @@map("compatibility_probe")
+}
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  username String @unique @db.VarChar(150)
+  passwordHash String @map("password_hash")
+  isActive Boolean @default(true) @map("is_active")
+  lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz(3)
+  displayName String @map("display_name") @db.VarChar(120)
+  role String
+  customerTickets Ticket[] @relation("Customer")
+  assignedTickets Ticket[] @relation("Assignee")
+  entries Entry[]
+  events AuditEvent[]
+  @@map("users")
+}
+model Ticket {
+  id String @id @default(uuid()) @db.Uuid
+  customerId String @map("customer_id") @db.Uuid
+  assigneeId String? @map("assignee_id") @db.Uuid
+  subject String @db.VarChar(160)
+  description String
+  priority String @default("MEDIUM")
+  status String @default("OPEN")
+  version Int @default(1)
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  calendarSnapshot Json @map("calendar_snapshot")
+  firstResponseDueAt DateTime @map("first_response_due_at") @db.Timestamptz(3)
+  firstResponseAt DateTime? @map("first_response_at") @db.Timestamptz(3)
+  firstResponseEntryId String? @map("first_response_entry_id") @db.Uuid
+  firstResponseBreachedAt DateTime? @map("first_response_breached_at") @db.Timestamptz(3)
+  resolutionBudgetMs BigInt @map("resolution_budget_ms")
+  resolutionConsumedMs BigInt @default(0) @map("resolution_consumed_ms")
+  resolutionRunningSince DateTime? @map("resolution_running_since") @db.Timestamptz(3)
+  resolutionDueAt DateTime? @map("resolution_due_at") @db.Timestamptz(3)
+  resolutionBreachedAt DateTime? @map("resolution_breached_at") @db.Timestamptz(3)
+  waitStartedAt DateTime? @map("wait_started_at") @db.Timestamptz(3)
+  autoCloseDueAt DateTime? @map("auto_close_due_at") @db.Timestamptz(3)
+  resolvedAt DateTime? @map("resolved_at") @db.Timestamptz(3)
+  reopenUntil DateTime? @map("reopen_until") @db.Timestamptz(3)
+  closedAt DateTime? @map("closed_at") @db.Timestamptz(3)
+  closeReason String? @map("close_reason")
+  customer User @relation("Customer",fields:[customerId],references:[id],onDelete:Restrict)
+  assignee User? @relation("Assignee",fields:[assigneeId],references:[id],onDelete:Restrict)
+  firstResponseEntry Entry? @relation("FirstResponse",fields:[firstResponseEntryId],references:[id],onDelete:Restrict)
+  entries Entry[] @relation("Conversation")
+  events AuditEvent[]
+  @@index([assigneeId,status,createdAt,id])
+  @@index([customerId,createdAt,id])
+  @@index([status,createdAt,id])
+  @@map("tickets")
+}
+model Entry {
+  id String @id @default(uuid()) @db.Uuid
+  ticketId String @map("ticket_id") @db.Uuid
+  authorId String @map("author_id") @db.Uuid
+  authorRole String @map("author_role")
+  authorLabel String @map("author_label")
+  kind String
+  body String
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  ticket Ticket @relation("Conversation",fields:[ticketId],references:[id],onDelete:Restrict)
+  author User @relation(fields:[authorId],references:[id],onDelete:Restrict)
+  firstResponseFor Ticket[] @relation("FirstResponse")
+  events AuditEvent[]
+  @@index([ticketId,createdAt,id])
+  @@index([ticketId,kind,createdAt,id])
+  @@map("entries")
+}
+model AuditEvent {
+  id BigInt @id @default(autoincrement())
+  ticketId String @map("ticket_id") @db.Uuid
+  actorId String? @map("actor_id") @db.Uuid
+  actorType String @map("actor_type")
+  actorLabel String @map("actor_label")
+  eventType String @map("event_type")
+  entryId String? @map("entry_id") @db.Uuid
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  effectiveAt DateTime @map("effective_at") @db.Timestamptz(3)
+  recordedAt DateTime @default(dbgenerated("date_trunc('milliseconds', clock_timestamp())")) @map("recorded_at") @db.Timestamptz(3)
+  ticketVersion Int @map("ticket_version")
+  data Json
+  ticket Ticket @relation(fields:[ticketId],references:[id],onDelete:Restrict)
+  actor User? @relation(fields:[actorId],references:[id],onDelete:Restrict)
+  entry Entry? @relation(fields:[entryId],references:[id],onDelete:Restrict)
+  @@index([ticketId,id])
+  @@map("audit_events")
+}
+model Session {
+  sid String @id @db.VarChar
+  sess Json @db.Json
+  expire DateTime @db.Timestamp(6)
+  @@index([expire])
+  @@map("session")
+}
