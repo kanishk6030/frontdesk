@@ -52,6 +52,8 @@ Do not create TypeScript-specific configuration, a compiler step, or a TypeScrip
 ## Database and migration sequence
 
 1. Provision the selected PostgreSQL database and distinct migration-owner/runtime principals. Verify the runtime principal cannot assume owner.
+   For Render, create the gitignored `.env.production` from `.env.production.example`, then run `npm run db:provision:production -- --preflight` followed by `--apply` only after review. Production mode uses the existing database and never creates, drops, renames, resets, or changes database ownership. No-flag `npm run db:provision` remains local-only.
+   Default privileges are configured through a connection authenticated as the migration owner, because a managed-database administrator with `CREATEROLE` is not thereby authorized to alter another role's defaults. After a failed `42501` attempt, update the script and repeat preflight/apply; do not grant role membership or change ownership as a workaround. The operation is retry-safe and rejects unexpected privileged roles, memberships, and Frontdesk object ownership.
 2. In development, define `schema.prisma`, generate a reviewed migration, and add custom SQL for checks, indexes, session storage, grants, and append-only/audit timestamp triggers. Creating the migration is a Phase 2 task.
 3. Use operator credentials for Prisma Migrate development/shadow operations and release migration application. The hosted runtime never runs migrate/reset/db push/seed on startup.
 4. Apply migrations to an empty test database and the intended hosted database using the reviewed owner-run procedure. Check database identity before any mutation. Use `prisma migrate deploy` for release, not `db push`.

@@ -15,6 +15,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "node --env-file-if-exists=../.env scripts/seed-demo.js",
     "db:provision": "node scripts/provision-local.js",
+    "db:provision:production": "node --env-file=../.env.production scripts/provision-local.js --production",
     "db:migrate:test": "node scripts/migrate-test.js",
     "db:grants": "node scripts/grant-runtime.js",
     "check:stack": "node scripts/check-stack.js",

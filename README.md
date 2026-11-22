@@ -179,8 +179,52 @@ docker compose up -d --wait
 
 ## Deployment preparation
 
+### One-time production PostgreSQL provisioning
+
+Local and production setup share `backend/scripts/provision-local.js`, but use separate explicit modes:
+
+- `npm run db:provision` keeps the existing local/Docker behavior. It may create the local databases and must never receive a production URL.
+- `npm run db:provision:production -- --preflight|--apply` loads the gitignored root `.env.production`, uses the existing managed database, and never creates, drops, renames, resets, or changes ownership of that database.
+
+For the existing Render database, first create the private file from the safe template:
+
+```powershell
+Copy-Item .env.production.example .env.production
+```
+
+Edit `.env.production` so all three URLs point to the same `frontdesk_q7b9` database and include `sslmode=require`:
+
+```text
+ADMIN_DATABASE_URL       existing frontdesk_admin connection
+MIGRATION_DATABASE_URL   new frontdesk_migration username and independent 24+ character password
+DATABASE_URL             new frontdesk_runtime username and independent 24+ character password
+```
+
+With Node.js 24, run the read-only preflight from `backend`:
+
+```powershell
+npm ci
+npm run db:provision:production -- --preflight
+```
+
+Review the reported database identity, administrator capability, schema permissions, roles, and existing-object ownership. If every check passes, apply once:
+
+```powershell
+npm run db:provision:production -- --apply
+```
+
+The apply mode is idempotent. It creates or hardens separate unprivileged migration/runtime roles, grants the migration role schema-creation permission, and ensures runtime cannot create schema objects. It does not migrate or seed. Store `MIGRATION_DATABASE_URL` and `DATABASE_URL` as protected GitHub Environment secrets; store only `DATABASE_URL` in the backend service. Never give the web service `ADMIN_DATABASE_URL` or `MIGRATION_DATABASE_URL`.
+
+If an earlier production apply stopped with `permission denied to change default privileges` (`42501`), update to the fixed script and rerun `--preflight`, then `--apply`. Do not change database ownership or manually grant the administrator membership in the migration role. The script now connects as the migration role to configure that role's own default privileges. The earlier administrator transaction was rolled back on failure; if managed PostgreSQL retained any independently committed role state, the preflight checks it and the idempotent apply safely reconciles it. Stop if preflight reports privileged roles, unexpected memberships, or wrong object owners.
+
+The existing manual release workflow then uses `MIGRATION_DATABASE_URL` for `prisma migrate deploy`, reuses `grant-runtime.js`, verifies restrictions with `verify-database.js`, and deploys only after those checks pass. After secrets are stored, remove the private operator file if it is no longer needed:
+
+```powershell
+Remove-Item -LiteralPath ..\.env.production
+```
+
 1. Push this repository to your authorized Git host and record its URL. No remote has been configured here.
-2. Provision hosted PostgreSQL 17 with separate migration-owner/runtime users. The initial managed connection is usually privileged: do not use it as `DATABASE_URL` for the app. Verify provider role management and TLS requirements first. Do not disable certificate verification. `db:provision` is deliberately local-only; create hosted principals with the provider's operator tools.
+2. Provision hosted PostgreSQL 17 with the production mode above. The initial managed connection is privileged and must never become the backend `DATABASE_URL`. Keep TLS required.
 3. In an operator-only environment, set `MIGRATION_DATABASE_URL` and restricted `DATABASE_URL`, then run backend `npm ci`, `npm run prisma:generate`, `npm run db:migrate:deploy`, `npm run db:grants`, and `npm run db:seed` with demo-password variables. Seed once; never on every web restart. Remove operator secrets from any web process environment.
 4. Import `render.yaml` into Render, or use equivalent Railway settings: root `backend`; Node 24; build `npm ci --include=dev && npm run prisma:generate && npm prune --omit=dev --omit=optional`; start `npm start`; health `/healthz`. Provide only restricted `DATABASE_URL`, `APP_ORIGIN`, stable `SESSION_SECRET`, `JOB_TOKEN`, `FRONTDESK_HOLIDAYS`, `TZ=UTC`, `NODE_ENV=production`, and verified `TRUST_PROXY_HOPS=1`. No migrations or seeding run at startup. Do not incur a paid tier without approval.
 5. Once the chosen backend hosting provider gives you its actual HTTPS origin, run from `frontend`: `npm run configure:hosting -- https://YOUR-ACTUAL-BACKEND-HOST`. Do not replace the localhost target in `vite.config.js`; that proxy is development-only. The command generates a concrete `frontend/vercel.json`; review/commit it. The script requires an HTTPS origin without a trailing slash. Deploy frontend root `frontend` to the chosen frontend host, using Node 24, the Vite build command and `dist` output. Set backend `APP_ORIGIN` to the exact stable deployed frontend origin.
