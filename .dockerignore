@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+coverage
+.local
+.tools
+.vscode
+reference
+*.log
+*.session.sql

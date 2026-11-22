@@ -6,6 +6,60 @@ Implemented with React/Vite/JSX/Tailwind/React Router/TanStack Query, Express ES
 
 **Status:** application works locally. Vercel/Render configuration and maintenance workflow are prepared. No live deployment or remote repository URL has been verified. See [Unfinished work](UNFINISHED.md) before treating this as a hosted submission.
 
+## Docker Compose setup
+
+The containerized local stack serves the application at **http://localhost:8080**. Nginx is the only service bound to the host; Express and PostgreSQL remain on Compose networks. The production images run Nginx and Node as non-root users, generate Prisma Client during the image build, and keep their filesystems read-only apart from explicit temporary mounts.
+
+Create the ignored root `.env` first (`node backend/scripts/setup-local.js` does this for a new workspace), then run from the repository root:
+
+```powershell
+docker compose --profile tools build
+docker compose up -d --wait postgres
+docker compose --profile tools run --rm db-setup
+docker compose up -d --wait backend frontend
+docker compose ps
+```
+
+`db-setup` is the explicit operator step. It idempotently provisions the separate migration/runtime roles, runs `prisma migrate deploy`, reapplies restricted runtime grants, and seeds demo data without replacing existing tickets or evidence. It receives owner credentials only for that one-shot run. Backend startup never migrates, grants, seeds, runs `db push`, or resets data.
+
+The Docker defaults are `FRONTDESK_HTTP_PORT=8080`, `DOCKER_APP_ORIGIN=http://localhost:8080`, and `DOCKER_NODE_ENV=development`. The development value is intentional for local HTTP cookies. An image deployment behind HTTPS must set `DOCKER_NODE_ENV=production` (or `NODE_ENV=production` in the target platform), set `APP_ORIGIN` to the exact HTTPS frontend origin, and terminate TLS at a trusted ingress.
+
+Useful non-destructive operations:
+
+```powershell
+docker compose logs --tail 50 frontend backend postgres
+docker compose restart
+docker compose down
+docker compose up -d --wait
+```
+
+`docker compose down` preserves `postgres_data`. Never use `down -v`, `prisma migrate reset`, or `prisma db push` as a setup shortcut. If source or lockfiles change, rebuild with `docker compose --profile tools build` and rerun the explicit `db-setup` step before recreating the services.
+
+## CI/CD and immutable images
+
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`. It uses Node 24 and PostgreSQL 17, provisions separate ephemeral owner/runtime roles, executes the real PostgreSQL backend suite, validates/generates Prisma, runs both linters and frontend tests/build, and builds both linux/amd64 runtime images. A failure in any required job blocks the image-publishing job.
+
+Successful trusted pushes to `main` publish:
+
+```text
+ghcr.io/<owner>/<repository>-backend:sha-<40-character-commit>
+ghcr.io/<owner>/<repository>-frontend:sha-<40-character-commit>
+```
+
+The workflow records each registry-provided `sha256` digest in its summary and a retained artifact. Pull requests have read-only permissions and never authenticate for publishing. `latest` is deliberately not published.
+
+Manual release uses `.github/workflows/release.yml`. Supply a previously published `sha-<commit>` version, component, target GitHub Environment, and provider. The workflow resolves the tag to its immutable digest and never rebuilds it. A backend release checks out that exact commit and, using Environment secrets, runs only `prisma migrate deploy`, restricted grants, and the runtime privilege verification before invoking the provider adapter. It never seeds, resets, or uses `db push`.
+
+Create GitHub Environments named `staging` and `production`. Configure required reviewers and prevent self-review for `production`. Each environment needs:
+
+- Secrets: `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `RENDER_API_KEY`, `RENDER_BACKEND_DEPLOY_HOOK_URL`, and `RENDER_BACKEND_SERVICE_ID`.
+- Variables: `BACKEND_HEALTH_URL`, including the `/healthz` path.
+- The backend Render service must be image-backed, have GHCR pull credentials if the package is private, retain its restricted runtime environment, disable automatic deploys, and accept the backend image name above. The existing `render.yaml` describes the earlier source-built option and is not the digest-release adapter.
+
+The initial Render adapter intentionally releases only the backend image. The Docker frontend image uses the Compose-only `backend:3000` upstream and must not be deployed as a standalone Render service. Deploy the Vite frontend to Vercel through the separately reviewed manual process; a future VPS/Railway adapter can define its own image topology without changing CI image identity.
+
+Rollback is another manual release using a previously recorded `sha-<commit>` whose digest still exists in GHCR. Migrations are forward-only: confirm the older application image is compatible with the already-applied schema. Never attempt rollback by resetting the database or deleting evidence.
+
 ## Local setup — PowerShell
 
 Prerequisites: Node **24 LTS**, npm, Docker Desktop with its Linux engine running, and Git. The verified runtime is Node 24.22.3. This workspace also has a checksum-verified portable runtime under ignored `.tools/node-v24.22.3-win-x64`; it is not part of a clone. If using that existing local runtime, prepend its directory to this terminal's PATH. Otherwise install Node 24 normally. Do not use the system Node 23 installation for this project.

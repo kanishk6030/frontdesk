@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
+const baseUrl = process.env.BROWSER_BASE_URL || 'http://localhost:5173';
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const failures = [];
@@ -18,7 +19,7 @@ page.on('response', async (response) => {
   }
 });
 async function login(username, password, target = page) {
-  await target.goto('http://localhost:5173/login');
+  await target.goto(baseUrl + '/login');
   await target.getByLabel('Username', { exact: true }).fill(username);
   await target.getByLabel('Password', { exact: true }).fill(password);
   await target.getByRole('button', { name: 'Sign in →', exact: true }).click();
@@ -52,7 +53,7 @@ try {
   await page.getByText('Clock paused', { exact: true }).waitFor();
   await logout();
   await login('customer.maya', process.env.DEMO_CUSTOMER_PASSWORD);
-  await page.goto('http://localhost:5173/customer/tickets/' + id);
+  await page.goto(baseUrl + '/customer/tickets/' + id);
   await page.getByText('Please send the order number.', { exact: true }).waitFor();
   assert.equal(await page.getByText(canary, { exact: true }).count(), 0);
   assert.ok(
@@ -64,14 +65,14 @@ try {
   await saved();
   await logout();
   await login('agent.ava', process.env.DEMO_AGENT_PASSWORD);
-  await page.goto('http://localhost:5173/agent/tickets/' + id);
+  await page.goto(baseUrl + '/agent/tickets/' + id);
   await page.getByLabel('Public reply', { exact: true }).fill('The order is fixed.');
   await page.getByRole('button', { name: 'Send and resolve', exact: true }).click();
   await saved();
   await page.getByText('Reopen through', { exact: true }).waitFor();
   await logout();
   await login('customer.maya', process.env.DEMO_CUSTOMER_PASSWORD);
-  await page.goto('http://localhost:5173/customer/tickets/' + id);
+  await page.goto(baseUrl + '/customer/tickets/' + id);
   await page.getByLabel('Public reply', { exact: true }).fill('The issue persists.');
   await page.getByRole('button', { name: 'Reopen ticket', exact: true }).click();
   await page.locator('article.entry').filter({ hasText: 'The issue persists.' }).waitFor();
@@ -85,7 +86,7 @@ try {
   mkdirSync('../.local', { recursive: true });
   await page.screenshot({ path: '../.local/agent-queue.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('http://localhost:5173/agent/tickets/' + id);
+  await page.goto(baseUrl + '/agent/tickets/' + id);
   await page.getByLabel('Public reply', { exact: true }).waitFor();
   await page.screenshot({ path: '../.local/mobile-detail.png', fullPage: true });
   await page.getByLabel('New priority', { exact: true }).selectOption('HIGH');
@@ -113,7 +114,7 @@ try {
   try {
     await login('agent.ravi', process.env.DEMO_AGENT_PASSWORD, otherPage);
     await Promise.all(
-      [page, otherPage].map((p) => p.goto('http://localhost:5173/agent/tickets/' + raceId)),
+      [page, otherPage].map((p) => p.goto(baseUrl + '/agent/tickets/' + raceId)),
     );
     await Promise.all(
       [page, otherPage].map((p) =>

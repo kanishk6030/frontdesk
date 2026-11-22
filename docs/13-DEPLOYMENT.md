@@ -4,7 +4,9 @@ Status: approved design baseline; Phase 2 explicitly authorized on 2026-11-21. E
 
 ## Hosting topology
 
-Phase 2 local infrastructure is root Docker Compose using official `postgres:17`, bound to `127.0.0.1:5432`, a persistent volume, and `pg_isready` health. `docker compose up -d --wait`, `docker compose ps`, `docker compose logs postgres`, and `docker compose down` manage it; never use `down -v` without explicit data-deletion approval. Provision distinct owner/runtime users for development and a separate test database before migrations. The initial image administrator is not an application identity. Exact verified setup commands are maintained in the root README during implementation.
+Phase 4 adds provider-neutral production images: a multi-stage Node 24 backend image with a non-root runtime and generated/pruned Prisma Client, plus a multi-stage Vite build served by non-root Nginx. Local Compose uses an internal-only PostgreSQL data network and a separate frontend/backend ingress bridge. Only Nginx binds a loopback host port. Its `/api` proxy preserves the same first-party cookie/CSRF topology as the hosted rewrite, and its fallback serves React Router paths. A one-shot operator image owns provisioning, `prisma migrate deploy`, runtime grants, and optional demo seeding; those capabilities and owner credentials are absent from the backend runtime container.
+
+The original Phase 2 database-only Compose bound PostgreSQL to loopback for host-run development. Phase 4's full-stack Compose removes that host binding by default: official `postgres:17` retains its persistent volume and `pg_isready` health check but is reachable only on the internal data network. `docker compose up -d --wait`, `docker compose ps`, `docker compose logs postgres`, and `docker compose down` manage the stack; never use `down -v` without explicit data-deletion approval. Provision distinct owner/runtime users before migrations. The initial image administrator is not an application identity. Exact verified setup commands are maintained in the root README.
 
 Deploy the Vite/React frontend on **Vercel**, the Node/Express backend on **Render** (or the user-approved **Railway** alternative), and use **hosted PostgreSQL**. Render plus PostgreSQL in the same region is the default proposal. Vercel hosts static browser assets; backend business logic, Prisma, secrets, sessions and maintenance stay on the backend host.
 
@@ -60,6 +62,12 @@ The session table is created by migration, not by connect-pg-simple on first req
 
 ## Build and release sequence
 
+Phase 5 implements provider-independent CI and immutable release coordination. CI validates the commit before publishing `linux/amd64` frontend/backend images to GHCR with only `sha-<full commit>` tags, then records registry digests. Pull requests cannot publish. The manual release workflow accepts only that validated tag form, resolves it to `image@sha256:digest`, and deploys without rebuilding. Common digest resolution and controlled database work remain in the workflow; provider behavior is isolated in an adapter script so Render can be replaced by a Railway/VPS adapter without changing image identity or migration policy.
+
+The initial Render adapter requires an image-backed service with automatic deploy disabled. It passes the exact digest through Render's deploy hook, requires a returned deploy ID, polls the Render API until that deploy is live, and then checks the configured HTTPS health URL. Production targets a protected GitHub Environment with required reviewer approval. Environment secrets separate migration-owner, restricted runtime, and provider credentials. The web service receives only runtime credentials.
+
+Backend release checks out the commit encoded by the validated image tag solely to run the matching locked Prisma migration tooling. It validates/generates Prisma, runs `prisma migrate deploy`, reapplies runtime grants, and verifies the runtime boundary before deploying the already-published image. It does not build, seed, reset, or use `db push`. The initial Render adapter is backend-only; the Compose frontend image is not suitable as a standalone Render service because its Nginx upstream is intentionally Compose-local. Vercel remains the frontend release target.
+
 1. P-01 establishes Vercel/backend/repository access, npm/Node compatibility, JavaScript Prisma generation, and the proxy/cookie feasibility. Pin lockfiles independently for frontend and backend.
 2. Run JavaScript lint, Vitest/Supertest tests with real PostgreSQL, Prisma validation/generation, and the Vite production build. Verify no project-owned forbidden source/config files or compiler scripts.
 3. Apply owner-run release migrations and one-time seed using an authorized operator environment. Keep that credential out of both service configurations.
@@ -102,6 +110,8 @@ No tsc/typecheck command, language-specific compiler config, or backend compilat
 ## Failure handling and handoff
 
 Health failures return safe errors; inspect redacted backend/DB logs. Roll back to a schema-compatible known-good deployment or use a reviewed forward migration; never repair a release by deleting reviewer data/history. If scheduled runs are missing, inspect the workflow and invoke the authenticated maintenance path with actual processing times preserved.
+
+Image rollback reruns the manual workflow with a prior recorded `sha-<commit>` version. The workflow resolves the old tag to its retained digest, so the registry must continue to store that image. Database migrations are not automatically reversed; verify backward application compatibility with the current schema or issue a reviewed forward fix.
 
 The four PDF submission items remain: live frontend URL, repository link, local-run README, and a short unfinished-work note. The note names actual omissions, portal-only delivery, calendar assumptions, trusted DB-owner boundary, proxy/cold-start/scheduler limits, JavaScript client compatibility choice, and honest time accounting as applicable. Provide demo credentials without publishing infrastructure secrets. Keep both deployments and the database available through the review period.
 

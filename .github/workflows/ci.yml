@@ -1,0 +1,183 @@
+name: Frontdesk CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: frontdesk
+          POSTGRES_USER: frontdesk
+          POSTGRES_PASSWORD: ci-admin-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U frontdesk -d frontdesk"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      POSTGRES_PASSWORD: ci-admin-password
+      DATABASE_URL: postgresql://frontdesk_runtime:ci-runtime-password@127.0.0.1:5432/frontdesk
+      MIGRATION_DATABASE_URL: postgresql://frontdesk_owner:ci-owner-password@127.0.0.1:5432/frontdesk
+      TEST_DATABASE_URL: postgresql://frontdesk_test_runtime:ci-test-runtime-password@127.0.0.1:5432/frontdesk_test
+      TEST_DATABASE_OWNER_URL: postgresql://frontdesk_test_owner:ci-test-owner-password@127.0.0.1:5432/frontdesk_test
+      SESSION_SECRET: ci-session-secret-at-least-32-characters-long
+      JOB_TOKEN: ci-job-token-at-least-32-characters-long
+      APP_ORIGIN: http://localhost:5173
+      FRONTDESK_HOLIDAYS: '[]'
+      NODE_ENV: test
+      TZ: UTC
+      PORT: 3000
+      TRUST_PROXY_HOPS: 0
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Provision isolated database roles
+        run: npm run db:provision
+      - run: npm run prisma:validate
+      - run: npm run prisma:generate
+      - name: Apply development migrations and grants
+        run: |
+          npm run db:migrate:deploy
+          npm run db:grants
+      - name: Apply integration migrations and grants
+        run: |
+          npm run db:migrate:test
+          npm run db:grants -- --test
+      - run: npm run db:verify
+      - run: npm test
+      - run: npm run lint
+      - run: npm run check:stack
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+
+  docker-build:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: backend
+            context: ./backend
+            target: runtime
+          - component: frontend
+            context: ./frontend
+            target: runtime
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.component }} image without publishing
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: docker-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: backend
+            context: ./backend
+            target: runtime
+          - component: frontend
+            context: ./frontend
+            target: runtime
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - name: Derive immutable image coordinates
+        id: image
+        shell: bash
+        run: |
+          repository="${GITHUB_REPOSITORY,,}"
+          echo "name=ghcr.io/${repository}-${{ matrix.component }}" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish immutable image
+        id: publish
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+      - name: Record immutable digest
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+          COMPONENT: ${{ matrix.component }}
+        shell: bash
+        run: |
+          printf '%s\n' "${IMAGE_NAME}:${IMAGE_TAG}@${IMAGE_DIGEST}" | tee "${COMPONENT}-image.txt"
+          printf '### %s image\n\n%s@%s\n' "$COMPONENT" "${IMAGE_NAME}:${IMAGE_TAG}" "${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.component }}-image-${{ github.sha }}
+          path: ${{ matrix.component }}-image.txt
+          if-no-files-found: error
+          retention-days: 30

@@ -1,4 +1,5 @@
 name: frontdesk
+
 services:
   postgres:
     image: postgres:17
@@ -6,15 +7,101 @@ services:
     environment:
       POSTGRES_DB: frontdesk
       POSTGRES_USER: frontdesk
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run local environment setup first}
-    ports:
-      - '127.0.0.1:5432:5432'
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example to .env and set secrets first}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - frontdesk_data
     healthcheck:
       test: [CMD-SHELL, pg_isready -U frontdesk -d frontdesk]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 12
+      start_period: 10s
+
+  db-setup:
+    profiles: [tools]
+    build:
+      context: ./backend
+      target: operator
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      JOB_TOKEN: ${JOB_TOKEN:?JOB_TOKEN is required}
+      APP_ORIGIN: ${DOCKER_APP_ORIGIN:-http://localhost:8080}
+      FRONTDESK_HOLIDAYS: ${FRONTDESK_HOLIDAYS:-[]}
+      NODE_ENV: development
+      TZ: UTC
+      DEMO_AGENT_PASSWORD: ${DEMO_AGENT_PASSWORD:?DEMO_AGENT_PASSWORD is required}
+      DEMO_CUSTOMER_PASSWORD: ${DEMO_CUSTOMER_PASSWORD:?DEMO_CUSTOMER_PASSWORD is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - frontdesk_data
+    restart: 'no'
+    security_opt:
+      - no-new-privileges:true
+
+  backend:
+    build:
+      context: ./backend
+      target: runtime
+    restart: unless-stopped
+    init: true
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      JOB_TOKEN: ${JOB_TOKEN:?JOB_TOKEN is required}
+      APP_ORIGIN: ${DOCKER_APP_ORIGIN:-http://localhost:8080}
+      FRONTDESK_HOLIDAYS: ${FRONTDESK_HOLIDAYS:-[]}
+      NODE_ENV: ${DOCKER_NODE_ENV:-development}
+      TZ: UTC
+      PORT: 3000
+      TRUST_PROXY_HOPS: 1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - frontdesk_data
+      - frontdesk_ingress
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  frontend:
+    build:
+      context: ./frontend
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${FRONTDESK_HTTP_PORT:-8080}:8080
+    networks:
+      - frontdesk_ingress
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  frontdesk_data:
+    internal: true
+  frontdesk_ingress:
+    driver: bridge
+
 volumes:
   postgres_data:

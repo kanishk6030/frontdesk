@@ -4,18 +4,18 @@ config({ path: '../.env', quiet: true });
 const q = (name) => '"' + name.replaceAll('"', '""') + '"';
 const literal = (value) => "'" + value.replaceAll("'", "''") + "'";
 const admin = new pg.Client({
-  host: '127.0.0.1',
-  port: 5432,
+  host: process.env.POSTGRES_HOST || '127.0.0.1',
+  port: Number(process.env.POSTGRES_PORT || 5432),
   user: 'frontdesk',
   password: process.env.POSTGRES_PASSWORD,
   database: 'frontdesk',
 });
 await admin.connect();
 try {
-  for (const [ownerKey, runtimeKey, database] of [
-    ['MIGRATION_DATABASE_URL', 'DATABASE_URL', 'frontdesk'],
-    ['TEST_DATABASE_OWNER_URL', 'TEST_DATABASE_URL', 'frontdesk_test'],
-  ]) {
+  const targets = [['MIGRATION_DATABASE_URL', 'DATABASE_URL', 'frontdesk']];
+  if (process.env.TEST_DATABASE_OWNER_URL && process.env.TEST_DATABASE_URL)
+    targets.push(['TEST_DATABASE_OWNER_URL', 'TEST_DATABASE_URL', 'frontdesk_test']);
+  for (const [ownerKey, runtimeKey, database] of targets) {
     const owner = new URL(process.env[ownerKey]),
       runtime = new URL(process.env[runtimeKey]);
     for (const identity of [owner, runtime]) {
