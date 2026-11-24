@@ -482,6 +482,19 @@ tbody tr:hover {
   color: #62806d;
   text-align: center;
 }
+.workspace-loading {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+.workspace-loading strong {
+  color: #315f46;
+  font-size: 18px;
+}
+.workspace-loading span {
+  color: #849186;
+  font-size: 12px;
+}
 .new-ticket {
   max-width: 720px;
 }

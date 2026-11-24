@@ -54,6 +54,14 @@ function ErrorBox({ error }) {
     </div>
   ) : null;
 }
+function WorkspaceLoading() {
+  return (
+    <div className="loading workspace-loading" role="status" aria-live="polite">
+      <strong>Opening workspace…</strong>
+      <span>Server waking up. Please wait.</span>
+    </div>
+  );
+}
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null),
     [loading, setLoading] = useState(true);
@@ -95,7 +103,7 @@ function Login() {
       navigate('/' + result.data.user.role.toLowerCase(), { replace: true });
     },
   });
-  if (loading) return <div className="loading">Opening your workspace…</div>;
+  if (loading) return <WorkspaceLoading />;
   if (user) return <Navigate to={'/' + user.role.toLowerCase()} replace />;
   return (
     <div className="login-page">
@@ -156,7 +164,7 @@ function Login() {
 }
 function Protected({ role, children }) {
   const { user, loading } = useContext(Auth);
-  if (loading) return <div className="loading">Opening workspace…</div>;
+  if (loading) return <WorkspaceLoading />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== role) return <Navigate to={'/' + user.role.toLowerCase()} replace />;
   return <Layout key={user.id}>{children}</Layout>;
